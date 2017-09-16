@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <title>Conway's game of life</title>
+  <script src="script.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+  <div id="menu">
+    <span></span>MOVE ME!
+    <div class="cell">
+      <label for="ups" class="cell">Updates per second:</label>
+      <span id="upslabel">1</span>
+    </div>
+    <input type="range" min="1" max="60" value="1" id="ups" />
+
+    <label for="wraparound" class="cell">Wrap around</label>
+    <input type="checkbox" id="wraparound" class="cell" />
+    <label for="drawtype">Draw type</label>
+    <select id="drawtype">
+      <option selected="selected">Solid</option>
+      <option>Gradient</option>
+      <option>Genetic colors</option>
+      <option>Random colors</option>
+    </select>
+    <label for="width">Width</label>
+    <input type="range" id="width"/>
+    <label for="height">Height</label>
+    <input type="range" id="height">
+    <label for="">File Upload</label><label for="">String Import</label>
+    <button class="cell" id="start">Start</button>
+    <button class="cell" id="reset">Reset</button>
+    
+  </div>
+  <canvas id="raster" width="600" height="600"></canvas>
+  <canvas id="canvas" width="600" height="600"></canvas>
+</body>
+
+</html>

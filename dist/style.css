@@ -1,0 +1,24 @@
+#canvas, #raster {
+    position: absolute;
+    top: 50px;
+    left: 0;
+}
+
+.hidden {
+    opacity: 0;
+    display: none;
+    transition: opacity .5s ease;
+    transition: display 1s;
+
+}
+#menu {
+    display: grid;
+    grid-gap: 1em;
+    padding: 1em;
+    grid-template-columns: 1fr 1fr;
+    position: absolute;
+    background-color: white;
+    z-index: 1;
+    font-family: sans-serif;
+    font-size: .8em;
+}

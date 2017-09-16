@@ -1,3 +1,3 @@
 interface IObserver {
-  notify(args: any);
+  notify(...args: any[]);
 }

@@ -10,10 +10,12 @@ namespace GameOfLife {
   let START: HTMLButtonElement;
   let RASTER: HTMLCanvasElement;
   let RCTX: CanvasRenderingContext2D;
-  let CTX;
+  let MENU: HTMLDivElement;
   let life: Life;
   let lastCell = { x: -1, y: -1 };
   let drawer: Drawer;
+  let mouseOffset = {x: 0, y: 0};
+  const rasterSize = 20;
 
   export function init() {
     //     readRLE(`#N Gosper glider gun
@@ -24,21 +26,20 @@ namespace GameOfLife {
     // obo$10bo5bo7bo$11bo3bo$12b2o!`);
     declareGlobals();
     addListeners();
-    life = new Life(40, 40);
+    onWindowResize();
     life.wrapAround = true;
     drawer = new SolidDrawer(CNV);
     life.registerObserver(drawer);
-    drawRaster(life);
   }
 
   function declareGlobals() {
     CNV = document.getElementById("canvas") as HTMLCanvasElement;
     RASTER = document.getElementById("raster") as HTMLCanvasElement;
-    CTX = CNV.getContext("2d") as CanvasRenderingContext2D;
     RCTX = RASTER.getContext("2d") as CanvasRenderingContext2D;
     UPS = document.getElementById("ups") as HTMLInputElement;
     UPSLABEL = document.getElementById("upslabel") as HTMLSpanElement;
     START = document.getElementById("start") as HTMLButtonElement;
+    MENU = document.getElementById("menu") as HTMLDivElement;
     UPS.value = "1";
   }
 
@@ -47,6 +48,39 @@ namespace GameOfLife {
     CNV.addEventListener("mousemove", onMouseMove);
     START.addEventListener("click", onStartClick);
     UPS.addEventListener("input", updateUPS);
+    MENU.addEventListener("mousedown", onMenuMouseDown, false);
+    MENU.addEventListener("mouseup", onMenuMouseUp, false);
+    window.addEventListener("resize", onWindowResize);
+  }
+
+  function onWindowResize() {
+    CNV.width = window.innerWidth;
+    CNV.height = window.innerHeight;
+    RASTER.width = window.innerWidth;
+    RASTER.height = window.innerHeight;
+    if(life === undefined) {
+      life = new Life(Math.ceil(CNV.width / rasterSize), Math.ceil(CNV.height / rasterSize));
+    } else {
+      life.setSize(Math.ceil(CNV.width / rasterSize), Math.ceil(CNV.height / rasterSize));
+    }
+    drawRaster();
+  }
+
+  function onMenuMouseDown(e: MouseEvent) {
+    if ((e.target as HTMLElement).id !== "menu" && (e.target as HTMLElement).id !== "menutitle") {
+      return;
+    }
+    MENU.addEventListener("mousemove", onMenuMouseMove, true);
+    mouseOffset = {x: e.clientX - MENU.offsetLeft, y: e.clientY - MENU.offsetTop};
+  }
+
+  function onMenuMouseUp(e: MouseEvent) {
+    MENU.removeEventListener("mousemove", onMenuMouseMove, true);
+  }
+
+  function onMenuMouseMove(e: MouseEvent) {
+    MENU.style.left = e.clientX - mouseOffset.x + "px";
+    MENU.style.top = e.clientY - mouseOffset.y + "px";
   }
 
   function onStartClick() {
@@ -85,7 +119,7 @@ namespace GameOfLife {
   }
 
   function getCell(xcoord, ycoord) {
-    return { x: Math.floor(xcoord / (CNV.width / life.w)), y: Math.floor(ycoord / (CNV.height / life.h)) };
+    return { x: Math.floor(xcoord / rasterSize), y: Math.floor(ycoord / rasterSize) };
   }
 
   function getCursorPosition(canvas, event) {
@@ -93,22 +127,22 @@ namespace GameOfLife {
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   }
 
-  function drawRaster(l: Life) {
+  function drawRaster() {
+
     RCTX.strokeStyle = "black";
     const cnvW = CNV.width;
     const cnvH = CNV.height;
-    const h = Math.round(cnvH / life.h);
-    const w = Math.round(cnvW / life.w);
-    for (let y = 0; y < life.h + 1; y++) {
+    RCTX.clearRect(0, 0, cnvW, cnvH);
+    for (let y = 0; y <= cnvH; y += rasterSize) {
       RCTX.beginPath();
-      RCTX.moveTo(0, y * h);
-      RCTX.lineTo(cnvW, y * h);
+      RCTX.moveTo(0, y);
+      RCTX.lineTo(cnvW, y);
       RCTX.stroke();
     }
-    for (let x = 0; x < life.w + 1; x++) {
+    for (let x = 0; x <= cnvW; x += rasterSize) {
       RCTX.beginPath();
-      RCTX.moveTo(x * w, 0);
-      RCTX.lineTo(x * w, cnvH);
+      RCTX.moveTo(x, 0);
+      RCTX.lineTo(x, cnvH);
       RCTX.stroke();
     }
   }

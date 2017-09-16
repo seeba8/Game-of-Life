@@ -18,7 +18,7 @@ class SolidDrawer extends Drawer {
     draw(grid) {
         const w = grid[0].length;
         const h = grid.length;
-        const SIZE = Math.round(this.CNV.width / w);
+        const SIZE = 20;
         for (let y = 0; y < h; y++) {
             for (let x = 0; x < w; x++) {
                 if (grid[y][x] === 1) {
@@ -35,7 +35,7 @@ class GradientDrawer extends Drawer {
     draw(grid) {
         const w = grid[0].length;
         const h = grid.length;
-        const SIZE = Math.round(this.CNV.width / w);
+        const SIZE = 20;
         this.CTX.fillStyle = "rgba(0,0,0,0.2)";
         for (let y = 0; y < h; y++) {
             for (let x = 0; x < w; x++) {
@@ -60,17 +60,17 @@ class ColorDrawer extends Drawer {
         super(cnv);
         this.getNewColor = colorpicker.bind(this);
     }
-    draw(grid) {
+    draw(grid, previous) {
         if (this.previous === undefined) {
             this.createInitialColors(grid);
         }
         else {
+            this.previous = previous;
             this.adjustPrevColors(grid);
         }
-        this.previous = grid;
         const w = grid[0].length;
         const h = grid.length;
-        const SIZE = Math.round(this.CNV.width / w);
+        const SIZE = 20;
         for (let y = 0; y < h; y++) {
             for (let x = 0; x < w; x++) {
                 if (grid[y][x] === 1) {
@@ -101,6 +101,25 @@ class ColorDrawer extends Drawer {
         return parents;
     }
     adjustPrevColors(grid) {
+        // adjust height of array
+        const minH = Math.min(grid.length, this.colors.length);
+        while (grid.length > this.colors.length) {
+            this.colors.push(new Array(grid[0].length));
+        }
+        if (this.colors.length > grid.length) {
+            this.colors = this.colors.slice(0, grid.length);
+        }
+        // adjust width of array
+        while (grid[0].length > this.colors[0].length) {
+            for (let i = 0; i < minH; i++) {
+                this.colors[i].push({ r: 0, g: 0, b: 0 });
+            }
+        }
+        if (grid[0].length < this.colors[0].length) {
+            for (let i = 0; i < minH; i++) {
+                this.colors[i] = this.colors[i].slice(0, grid[0].length);
+            }
+        }
         const h = grid.length;
         const w = grid[0].length;
         for (let y = 0; y < h; y++) {
@@ -177,10 +196,12 @@ var GameOfLife;
     let START;
     let RASTER;
     let RCTX;
-    let CTX;
+    let MENU;
     let life;
     let lastCell = { x: -1, y: -1 };
     let drawer;
+    let mouseOffset = { x: 0, y: 0 };
+    const rasterSize = 20;
     function init() {
         //     readRLE(`#N Gosper glider gun
         // #C This was the first gun discovered.
@@ -190,21 +211,20 @@ var GameOfLife;
         // obo$10bo5bo7bo$11bo3bo$12b2o!`);
         declareGlobals();
         addListeners();
-        life = new Life(40, 40);
+        onWindowResize();
         life.wrapAround = true;
         drawer = new SolidDrawer(CNV);
         life.registerObserver(drawer);
-        drawRaster(life);
     }
     GameOfLife.init = init;
     function declareGlobals() {
         CNV = document.getElementById("canvas");
         RASTER = document.getElementById("raster");
-        CTX = CNV.getContext("2d");
         RCTX = RASTER.getContext("2d");
         UPS = document.getElementById("ups");
         UPSLABEL = document.getElementById("upslabel");
         START = document.getElementById("start");
+        MENU = document.getElementById("menu");
         UPS.value = "1";
     }
     function addListeners() {
@@ -212,6 +232,36 @@ var GameOfLife;
         CNV.addEventListener("mousemove", onMouseMove);
         START.addEventListener("click", onStartClick);
         UPS.addEventListener("input", updateUPS);
+        MENU.addEventListener("mousedown", onMenuMouseDown, false);
+        MENU.addEventListener("mouseup", onMenuMouseUp, false);
+        window.addEventListener("resize", onWindowResize);
+    }
+    function onWindowResize() {
+        CNV.width = window.innerWidth;
+        CNV.height = window.innerHeight;
+        RASTER.width = window.innerWidth;
+        RASTER.height = window.innerHeight;
+        if (life === undefined) {
+            life = new Life(Math.ceil(CNV.width / rasterSize), Math.ceil(CNV.height / rasterSize));
+        }
+        else {
+            life.setSize(Math.ceil(CNV.width / rasterSize), Math.ceil(CNV.height / rasterSize));
+        }
+        drawRaster();
+    }
+    function onMenuMouseDown(e) {
+        if (e.target.id !== "menu" && e.target.id !== "menutitle") {
+            return;
+        }
+        MENU.addEventListener("mousemove", onMenuMouseMove, true);
+        mouseOffset = { x: e.clientX - MENU.offsetLeft, y: e.clientY - MENU.offsetTop };
+    }
+    function onMenuMouseUp(e) {
+        MENU.removeEventListener("mousemove", onMenuMouseMove, true);
+    }
+    function onMenuMouseMove(e) {
+        MENU.style.left = e.clientX - mouseOffset.x + "px";
+        MENU.style.top = e.clientY - mouseOffset.y + "px";
     }
     function onStartClick() {
         RASTER.classList.add("hidden");
@@ -244,28 +294,27 @@ var GameOfLife;
         }
     }
     function getCell(xcoord, ycoord) {
-        return { x: Math.floor(xcoord / (CNV.width / life.w)), y: Math.floor(ycoord / (CNV.height / life.h)) };
+        return { x: Math.floor(xcoord / rasterSize), y: Math.floor(ycoord / rasterSize) };
     }
     function getCursorPosition(canvas, event) {
         const rect = canvas.getBoundingClientRect();
         return { x: event.clientX - rect.left, y: event.clientY - rect.top };
     }
-    function drawRaster(l) {
+    function drawRaster() {
         RCTX.strokeStyle = "black";
         const cnvW = CNV.width;
         const cnvH = CNV.height;
-        const h = Math.round(cnvH / life.h);
-        const w = Math.round(cnvW / life.w);
-        for (let y = 0; y < life.h + 1; y++) {
+        RCTX.clearRect(0, 0, cnvW, cnvH);
+        for (let y = 0; y <= cnvH; y += rasterSize) {
             RCTX.beginPath();
-            RCTX.moveTo(0, y * h);
-            RCTX.lineTo(cnvW, y * h);
+            RCTX.moveTo(0, y);
+            RCTX.lineTo(cnvW, y);
             RCTX.stroke();
         }
-        for (let x = 0; x < life.w + 1; x++) {
+        for (let x = 0; x <= cnvW; x += rasterSize) {
             RCTX.beginPath();
-            RCTX.moveTo(x * w, 0);
-            RCTX.lineTo(x * w, cnvH);
+            RCTX.moveTo(x, 0);
+            RCTX.lineTo(x, cnvH);
             RCTX.stroke();
         }
     }
@@ -299,6 +348,44 @@ class Life extends Observable {
         this.w = width;
         this.h = height;
         this.initGrid();
+    }
+    getGrid() {
+        return this.buffer[this.c % 2];
+    }
+    setSize(w, h) {
+        this.w = w;
+        this.h = h;
+        const minH = Math.min(h, this.buffer[0].length);
+        if (h < this.buffer[0].length) {
+            this.buffer[0] = this.buffer[0].slice(0, h);
+            this.buffer[1] = this.buffer[1].slice(0, h);
+        }
+        else if (h > this.buffer[0].length) {
+            for (let i = this.buffer[0].length; i < h; i++) {
+                this.buffer[0].push(new Uint8Array(w));
+                this.buffer[1].push(new Uint8Array(w));
+            }
+        }
+        if (w < this.buffer[0][0].length) {
+            for (let y = 0; y < minH; y++) {
+                this.buffer[0][y] = this.buffer[0][y].slice(0, w);
+                this.buffer[1][y] = this.buffer[1][y].slice(0, w);
+            }
+        }
+        else if (w > this.buffer[0][0].length) {
+            for (let y = 0; y < minH; y++) {
+                for (let i = 0; i < 2; i++) {
+                    const b = this.buffer[i][y].slice(0);
+                    this.buffer[i][y] = new Uint8Array(w);
+                    for (let x = 0; x < b.length; x++) {
+                        this.buffer[i][y][x] = b[x];
+                    }
+                    // this.buffer[i][y].set(b[0]);
+                    console.log(this.buffer[i][y]);
+                }
+            }
+        }
+        this.notifyObservers();
     }
     set ups(ups) {
         this._ups = ups;
@@ -354,7 +441,7 @@ class Life extends Observable {
      */
     notifyObservers() {
         for (const observer of this.observers) {
-            observer.notify(this.buffer[this.c % 2]);
+            observer.notify(this.buffer[this.c % 2], this.buffer[(this.c + 1) % 2]);
         }
     }
     countNeighbours(grid, x, y) {

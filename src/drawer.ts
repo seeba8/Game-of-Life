@@ -10,6 +10,6 @@ abstract class Drawer implements IObserver {
     this.draw(args);
   }
 
-  public abstract draw(grid: Uint8Array[]): void;
+  public abstract draw(grid: Uint8Array[], prev?: Uint8Array[]): void;
 
 }

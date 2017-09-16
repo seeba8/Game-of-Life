@@ -3,7 +3,7 @@ class Life extends Observable {
   public w: number;
   public h: number;
   public wrapAround = false;
-  private buffer = { 0: new Array(), 1: new Array() };
+  private buffer: {0: Uint8Array[], 1: Uint8Array[]} = { 0: new Array(), 1: new Array() };
   private c = 0;
   private clock: number;
   private _ups: number = 1;
@@ -13,6 +13,44 @@ class Life extends Observable {
     this.w = width;
     this.h = height;
     this.initGrid();
+  }
+
+  public getGrid() {
+    return this.buffer[this.c % 2];
+  }
+
+  public setSize(w: number, h: number) {
+    this.w = w;
+    this.h = h;
+    const minH = Math.min(h, this.buffer[0].length);
+    if (h < this.buffer[0].length) {
+      this.buffer[0] = this.buffer[0].slice(0, h);
+      this.buffer[1] = this.buffer[1].slice(0, h);
+    } else if (h > this.buffer[0].length) {
+      for (let i = this.buffer[0].length; i < h; i++) {
+        this.buffer[0].push(new Uint8Array(w));
+        this.buffer[1].push(new Uint8Array(w));
+      }
+    }
+    if (w < this.buffer[0][0].length) {
+      for (let y = 0; y < minH; y++) {
+        this.buffer[0][y] = this.buffer[0][y].slice(0, w);
+        this.buffer[1][y] = this.buffer[1][y].slice(0, w);
+      }
+    } else if (w > this.buffer[0][0].length) {
+      for (let y = 0; y < minH; y++) {
+        for (let i = 0; i < 2; i++) {
+          const b: Uint8Array = this.buffer[i][y].slice(0);
+          this.buffer[i][y] = new Uint8Array(w);
+          for (let x = 0; x < b.length; x++) {
+            this.buffer[i][y][x] = b[x];
+          }
+          // this.buffer[i][y].set(b[0]);
+          console.log(this.buffer[i][y]);
+        }
+      }
+    }
+    this.notifyObservers();
   }
 
   public set ups(ups: number) {
@@ -72,7 +110,7 @@ class Life extends Observable {
    */
   protected notifyObservers() {
     for (const observer of this.observers) {
-      observer.notify(this.buffer[this.c % 2]);
+      observer.notify(this.buffer[this.c % 2], this.buffer[(this.c + 1) % 2]);
     }
   }
 

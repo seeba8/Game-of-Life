@@ -15,16 +15,16 @@ class ColorDrawer extends Drawer {
     this.getNewColor = colorpicker.bind(this);
   }
 
-  public draw(grid: Uint8Array[]): void {
+  public draw(grid: Uint8Array[], previous): void {
     if (this.previous === undefined) {
       this.createInitialColors(grid);
     } else {
+      this.previous = previous;
       this.adjustPrevColors(grid);
     }
-    this.previous = grid;
     const w = grid[0].length;
     const h = grid.length;
-    const SIZE = Math.round(this.CNV.width / w);
+    const SIZE = 20;
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         if (grid[y][x] === 1) {
@@ -57,6 +57,28 @@ class ColorDrawer extends Drawer {
   }
 
   protected adjustPrevColors(grid: Uint8Array[]): void {
+
+    // adjust height of array
+    const minH = Math.min(grid.length, this.colors.length);
+    while (grid.length > this.colors.length) {
+      this.colors.push(new Array(grid[0].length));
+    }
+    if (this.colors.length > grid.length) {
+      this.colors = this.colors.slice(0, grid.length);
+    }
+
+    // adjust width of array
+    while (grid[0].length > this.colors[0].length) {
+      for (let i = 0; i < minH; i++) {
+        this.colors[i].push({r: 0, g: 0, b: 0});
+      }
+    }
+    if ( grid[0].length < this.colors[0].length) {
+      for (let i = 0; i < minH; i++) {
+        this.colors[i] = this.colors[i].slice(0, grid[0].length);
+      }
+    }
+
     const h = grid.length;
     const w = grid[0].length;
     for (let y = 0; y < h; y++) {

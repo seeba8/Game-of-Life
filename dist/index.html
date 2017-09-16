@@ -12,7 +12,7 @@
 
 <body>
   <div id="menu">
-    <span></span>MOVE ME!
+    <h1 class="wholerow" id="menutitle">Conway's Game of Life</h1>
     <div class="cell">
       <label for="ups" class="cell">Updates per second:</label>
       <span id="upslabel">1</span>
@@ -23,16 +23,16 @@
     <input type="checkbox" id="wraparound" class="cell" />
     <label for="drawtype">Draw type</label>
     <select id="drawtype">
-      <option selected="selected">Solid</option>
-      <option>Gradient</option>
-      <option>Genetic colors</option>
-      <option>Random colors</option>
+      <option selected="selected" value="solid">Solid</option>
+      <option value="gradient">Gradient</option>
+      <option value="genetic">Genetic colors</option>
+      <option value="random">Random colors</option>
     </select>
     <label for="width">Width</label>
     <input type="range" id="width"/>
     <label for="height">Height</label>
     <input type="range" id="height">
-    <label for="">File Upload</label><label for="">String Import</label>
+    <label>File Upload</label><label>String Import</label>
     <button class="cell" id="start">Start</button>
     <button class="cell" id="reset">Reset</button>
     

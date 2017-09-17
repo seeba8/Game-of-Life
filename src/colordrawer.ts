@@ -134,7 +134,7 @@ namespace ColorDrawerOptions {
     return { r: normalized[0], g: normalized[1], b: normalized[2]};
   }
 
-  export function randomColorPicker(x: number, y: number): IColor {
+  export function randomColorPicker(): IColor {
     return {
       r: Math.random() * 255,
       g: Math.random() * 255,

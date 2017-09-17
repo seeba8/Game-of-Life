@@ -11,8 +11,11 @@ namespace GameOfLife {
   let RASTER: HTMLCanvasElement;
   let RCTX: CanvasRenderingContext2D;
   let MENU: HTMLDivElement;
+  let WRAPAROUND: HTMLInputElement;
+  let DRAWTYPE: HTMLSelectElement;
   let life: Life;
   let lastCell = { x: -1, y: -1 };
+  let editDrawer: Drawer;
   let drawer: Drawer;
   let mouseOffset = {x: 0, y: 0};
   const rasterSize = 20;
@@ -27,9 +30,9 @@ namespace GameOfLife {
     declareGlobals();
     addListeners();
     onWindowResize();
-    life.wrapAround = true;
+    editDrawer = new SolidDrawer(CNV);
     drawer = new SolidDrawer(CNV);
-    life.registerObserver(drawer);
+    life.registerObserver(editDrawer);
   }
 
   function declareGlobals() {
@@ -40,6 +43,8 @@ namespace GameOfLife {
     UPSLABEL = document.getElementById("upslabel") as HTMLSpanElement;
     START = document.getElementById("start") as HTMLButtonElement;
     MENU = document.getElementById("menu") as HTMLDivElement;
+    WRAPAROUND = document.getElementById("wraparound") as HTMLInputElement;
+    DRAWTYPE = document.getElementById("drawtype") as HTMLSelectElement;
     UPS.value = "1";
   }
 
@@ -51,6 +56,28 @@ namespace GameOfLife {
     MENU.addEventListener("mousedown", onMenuMouseDown, false);
     MENU.addEventListener("mouseup", onMenuMouseUp, false);
     window.addEventListener("resize", onWindowResize);
+    WRAPAROUND.addEventListener("change", onWrapAroundChange);
+    DRAWTYPE.addEventListener("change", onDrawTypeChange);
+  }
+
+  function onDrawTypeChange(e: Event) {
+    switch ((e.target as HTMLSelectElement).value) {
+      case "gradient":
+        drawer = new GradientDrawer(CNV);
+        break;
+      case "genetic":
+        drawer = new ColorDrawer(CNV, ColorDrawerOptions.geneticColorPicker);
+        break;
+      case "random":
+        drawer = new ColorDrawer(CNV, ColorDrawerOptions.randomColorPicker);
+        break;
+      default:
+        drawer = new SolidDrawer(CNV);
+    }
+  }
+
+  function onWrapAroundChange(e: Event) {
+    life.wrapAround = (e.target as HTMLInputElement).checked;
   }
 
   function onWindowResize() {
@@ -58,7 +85,7 @@ namespace GameOfLife {
     CNV.height = window.innerHeight;
     RASTER.width = window.innerWidth;
     RASTER.height = window.innerHeight;
-    if(life === undefined) {
+    if (life === undefined) {
       life = new Life(Math.ceil(CNV.width / rasterSize), Math.ceil(CNV.height / rasterSize));
     } else {
       life.setSize(Math.ceil(CNV.width / rasterSize), Math.ceil(CNV.height / rasterSize));
@@ -74,7 +101,7 @@ namespace GameOfLife {
     mouseOffset = {x: e.clientX - MENU.offsetLeft, y: e.clientY - MENU.offsetTop};
   }
 
-  function onMenuMouseUp(e: MouseEvent) {
+  function onMenuMouseUp() {
     MENU.removeEventListener("mousemove", onMenuMouseMove, true);
   }
 
@@ -87,8 +114,9 @@ namespace GameOfLife {
     RASTER.classList.add("hidden");
     CNV.removeEventListener("mousedown", onMouseDown);
     CNV.removeEventListener("mousemove", onMouseMove);
-    life.removeObserver(drawer);
-    drawer = new ColorDrawer(CNV, ColorDrawerOptions.geneticColorPicker);
+    life.removeObserver(editDrawer);
+    editDrawer = new ColorDrawer(CNV, ColorDrawerOptions.geneticColorPicker);
+    CNV.getContext("2d").clearRect(0, 0, CNV.width, CNV.height);
     life.registerObserver(drawer);
     life.start();
   }

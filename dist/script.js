@@ -8,8 +8,6 @@ class Drawer {
         this.draw(args);
     }
 }
-/// <reference path="drawer.ts" />
-/// <reference path="iobserver.ts" />
 class SolidDrawer extends Drawer {
     constructor(cnv) {
         super(cnv);
@@ -54,7 +52,6 @@ class GradientDrawer extends Drawer {
         }
     }
 }
-/// <reference path="drawer.ts" />
 class ColorDrawer extends Drawer {
     constructor(cnv, colorpicker) {
         super(cnv);
@@ -85,10 +82,8 @@ class ColorDrawer extends Drawer {
             }
         }
     }
-    // protected getNewColor(x: number, y: number): IColor;
     getParentColors(x, y) {
         const parents = new Array();
-        // needs to know about wraparound to do it correctly though
         for (let offsetX = -1; offsetX < 2; offsetX++) {
             for (let offsetY = -1; offsetY < 2; offsetY++) {
                 if (x + offsetX !== -1 && x + offsetX !== this.previous[0].length &&
@@ -101,7 +96,6 @@ class ColorDrawer extends Drawer {
         return parents;
     }
     adjustPrevColors(grid) {
-        // adjust height of array
         const minH = Math.min(grid.length, this.colors.length);
         while (grid.length > this.colors.length) {
             this.colors.push(new Array(grid[0].length));
@@ -109,7 +103,6 @@ class ColorDrawer extends Drawer {
         if (this.colors.length > grid.length) {
             this.colors = this.colors.slice(0, grid.length);
         }
-        // adjust width of array
         while (grid[0].length > this.colors[0].length) {
             for (let i = 0; i < minH; i++) {
                 this.colors[i].push({ r: 0, g: 0, b: 0 });
@@ -125,7 +118,6 @@ class ColorDrawer extends Drawer {
         for (let y = 0; y < h; y++) {
             for (let x = 0; x < w; x++) {
                 if (grid[y][x] === 1 && this.previous[y][x] === 0) {
-                    // new born, mix parents' colors
                     this.colors[y][x] = this.getNewColor(x, y);
                 }
             }
@@ -142,16 +134,9 @@ class ColorDrawer extends Drawer {
                 if (grid[y][x] === 1) {
                     this.colors[y][x] = {
                         r: (c % 3 === 0 ? 255 : 0),
-                        // tslint:disable-next-line:object-literal-sort-keys
                         g: (c % 3 === 1 ? 255 : 0),
                         b: (c % 3 === 2 ? 255 : 0),
                     };
-                    // this.colors[y][x] = {
-                    //   r: Math.round((y / h) * 255),
-                    //   // tslint:disable-next-line:object-literal-sort-keys
-                    //   g: 0,
-                    //   b: 0,
-                    // };
                     c++;
                 }
             }
@@ -175,7 +160,7 @@ var ColorDrawerOptions;
         return { r: normalized[0], g: normalized[1], b: normalized[2] };
     }
     ColorDrawerOptions.geneticColorPicker = geneticColorPicker;
-    function randomColorPicker(x, y) {
+    function randomColorPicker() {
         return {
             r: Math.random() * 255,
             g: Math.random() * 255,
@@ -184,10 +169,6 @@ var ColorDrawerOptions;
     }
     ColorDrawerOptions.randomColorPicker = randomColorPicker;
 })(ColorDrawerOptions || (ColorDrawerOptions = {}));
-/// <reference path="drawer.ts" />
-/// <reference path="soliddrawer.ts" />
-/// <reference path="gradientdrawer.ts" />
-/// <reference path="colordrawer.ts" />
 var GameOfLife;
 (function (GameOfLife) {
     let CNV;
@@ -197,24 +178,21 @@ var GameOfLife;
     let RASTER;
     let RCTX;
     let MENU;
+    let WRAPAROUND;
+    let DRAWTYPE;
     let life;
     let lastCell = { x: -1, y: -1 };
+    let editDrawer;
     let drawer;
     let mouseOffset = { x: 0, y: 0 };
     const rasterSize = 20;
     function init() {
-        //     readRLE(`#N Gosper glider gun
-        // #C This was the first gun discovered.
-        // #C As its name suggests, it was discovered by Bill Gosper.
-        // x = 36, y = 9, rule = B3/S23
-        // 24bo$22bobo$12b2o6b2o12b2o$11bo3bo4b2o12b2o$2o8bo5bo3b2o$2o8bo3bob2o4b
-        // obo$10bo5bo7bo$11bo3bo$12b2o!`);
         declareGlobals();
         addListeners();
         onWindowResize();
-        life.wrapAround = true;
+        editDrawer = new SolidDrawer(CNV);
         drawer = new SolidDrawer(CNV);
-        life.registerObserver(drawer);
+        life.registerObserver(editDrawer);
     }
     GameOfLife.init = init;
     function declareGlobals() {
@@ -225,6 +203,8 @@ var GameOfLife;
         UPSLABEL = document.getElementById("upslabel");
         START = document.getElementById("start");
         MENU = document.getElementById("menu");
+        WRAPAROUND = document.getElementById("wraparound");
+        DRAWTYPE = document.getElementById("drawtype");
         UPS.value = "1";
     }
     function addListeners() {
@@ -235,6 +215,26 @@ var GameOfLife;
         MENU.addEventListener("mousedown", onMenuMouseDown, false);
         MENU.addEventListener("mouseup", onMenuMouseUp, false);
         window.addEventListener("resize", onWindowResize);
+        WRAPAROUND.addEventListener("change", onWrapAroundChange);
+        DRAWTYPE.addEventListener("change", onDrawTypeChange);
+    }
+    function onDrawTypeChange(e) {
+        switch (e.target.value) {
+            case "gradient":
+                drawer = new GradientDrawer(CNV);
+                break;
+            case "genetic":
+                drawer = new ColorDrawer(CNV, ColorDrawerOptions.geneticColorPicker);
+                break;
+            case "random":
+                drawer = new ColorDrawer(CNV, ColorDrawerOptions.randomColorPicker);
+                break;
+            default:
+                drawer = new SolidDrawer(CNV);
+        }
+    }
+    function onWrapAroundChange(e) {
+        life.wrapAround = e.target.checked;
     }
     function onWindowResize() {
         CNV.width = window.innerWidth;
@@ -256,7 +256,7 @@ var GameOfLife;
         MENU.addEventListener("mousemove", onMenuMouseMove, true);
         mouseOffset = { x: e.clientX - MENU.offsetLeft, y: e.clientY - MENU.offsetTop };
     }
-    function onMenuMouseUp(e) {
+    function onMenuMouseUp() {
         MENU.removeEventListener("mousemove", onMenuMouseMove, true);
     }
     function onMenuMouseMove(e) {
@@ -267,8 +267,9 @@ var GameOfLife;
         RASTER.classList.add("hidden");
         CNV.removeEventListener("mousedown", onMouseDown);
         CNV.removeEventListener("mousemove", onMouseMove);
-        life.removeObserver(drawer);
-        drawer = new ColorDrawer(CNV, ColorDrawerOptions.geneticColorPicker);
+        life.removeObserver(editDrawer);
+        editDrawer = new ColorDrawer(CNV, ColorDrawerOptions.geneticColorPicker);
+        CNV.getContext("2d").clearRect(0, 0, CNV.width, CNV.height);
         life.registerObserver(drawer);
         life.start();
     }
@@ -320,7 +321,6 @@ var GameOfLife;
     }
 })(GameOfLife || (GameOfLife = {}));
 window.addEventListener("load", GameOfLife.init);
-/// <reference path="iobserver.ts" />
 class Observable {
     constructor() {
         this.observers = new Array();
@@ -337,7 +337,6 @@ class Observable {
         return true;
     }
 }
-/// <reference path="observable.ts" />
 class Life extends Observable {
     constructor(width, height) {
         super();
@@ -380,8 +379,6 @@ class Life extends Observable {
                     for (let x = 0; x < b.length; x++) {
                         this.buffer[i][y][x] = b[x];
                     }
-                    // this.buffer[i][y].set(b[0]);
-                    console.log(this.buffer[i][y]);
                 }
             }
         }
@@ -423,8 +420,9 @@ class Life extends Observable {
         this.notifyObservers();
     }
     start() {
+        console.log(this.wrapAround);
         this.clock = setInterval(this.tick.bind(this), 1000 / this.ups);
-        // this.tick();
+        this.tick();
     }
     toggleCell(x, y) {
         const grid = this.buffer[this.c % 2];
@@ -436,9 +434,6 @@ class Life extends Observable {
         }
         this.notifyObservers();
     }
-    /**
-     * @override
-     */
     notifyObservers() {
         for (const observer of this.observers) {
             observer.notify(this.buffer[this.c % 2], this.buffer[(this.c + 1) % 2]);

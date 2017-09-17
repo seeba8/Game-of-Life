@@ -6,6 +6,9 @@
         "watch": true,
         "sourceRoot": "src/",
         "alwaysStrict": true,
-        "outFile": "dist/script.js"
+        "outFile": "dist/script.js",
+        "removeComments": true,
+        "noUnusedParameters": true,
+        "noUnusedLocals": true
     }
 }

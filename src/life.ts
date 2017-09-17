@@ -46,7 +46,6 @@ class Life extends Observable {
             this.buffer[i][y][x] = b[x];
           }
           // this.buffer[i][y].set(b[0]);
-          console.log(this.buffer[i][y]);
         }
       }
     }
@@ -91,8 +90,9 @@ class Life extends Observable {
   }
 
   public start(): void {
+    console.log(this.wrapAround);
     this.clock = setInterval(this.tick.bind(this), 1000 / this.ups)
-    // this.tick();
+    this.tick();
   }
 
   public toggleCell(x: number, y: number): void {

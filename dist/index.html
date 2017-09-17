@@ -28,10 +28,11 @@
       <option value="genetic">Genetic colors</option>
       <option value="random">Random colors</option>
     </select>
-    <label for="width">Width</label>
-    <input type="range" id="width"/>
-    <label for="height">Height</label>
-    <input type="range" id="height">
+    <div class="cell">
+      <label for="rastersize" class="cell">Size</label>
+      <span id="rasterlabel">20</span>
+    </div>
+    <input type="range" min="4" max="100" value="20" id="rastersize"/>
     <label>File Upload</label><label>String Import</label>
     <button class="cell" id="start">Start</button>
     <button class="cell" id="reset">Reset</button>

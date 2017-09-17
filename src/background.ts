@@ -8,17 +8,22 @@ namespace GameOfLife {
   let UPS: HTMLInputElement;
   let UPSLABEL: HTMLSpanElement;
   let START: HTMLButtonElement;
+  let PAUSE: HTMLButtonElement;
+  let RESET: HTMLButtonElement;
+  let STOP: HTMLButtonElement;
   let RASTER: HTMLCanvasElement;
   let RCTX: CanvasRenderingContext2D;
   let MENU: HTMLDivElement;
   let WRAPAROUND: HTMLInputElement;
   let DRAWTYPE: HTMLSelectElement;
+  let RASTERSIZE: HTMLInputElement;
+  let RASTERLABEL: HTMLSpanElement;
   let life: Life;
   let lastCell = { x: -1, y: -1 };
   let editDrawer: Drawer;
   let drawer: Drawer;
   let mouseOffset = {x: 0, y: 0};
-  const rasterSize = 20;
+  let rasterSize = 20;
 
   export function init() {
     //     readRLE(`#N Gosper glider gun
@@ -30,9 +35,10 @@ namespace GameOfLife {
     declareGlobals();
     addListeners();
     onWindowResize();
-    editDrawer = new SolidDrawer(CNV);
-    drawer = new SolidDrawer(CNV);
+    editDrawer = new SolidDrawer(CNV, rasterSize);
+    drawer = new SolidDrawer(CNV, rasterSize);
     life.registerObserver(editDrawer);
+    setValuesFromUI();
   }
 
   function declareGlobals() {
@@ -45,34 +51,49 @@ namespace GameOfLife {
     MENU = document.getElementById("menu") as HTMLDivElement;
     WRAPAROUND = document.getElementById("wraparound") as HTMLInputElement;
     DRAWTYPE = document.getElementById("drawtype") as HTMLSelectElement;
-    UPS.value = "1";
+    RASTERSIZE = document.getElementById("rastersize") as HTMLInputElement;
+    RASTERLABEL = document.getElementById("rasterlabel") as HTMLSpanElement;
+    RESET = document.getElementById("reset") as HTMLButtonElement;
+    PAUSE = document.getElementById("pause") as HTMLButtonElement;
+    STOP = document.getElementById("stop") as HTMLButtonElement;
   }
 
   function addListeners() {
     CNV.addEventListener("mousedown", onMouseDown);
     CNV.addEventListener("mousemove", onMouseMove);
     START.addEventListener("click", onStartClick);
-    UPS.addEventListener("input", updateUPS);
+    UPS.addEventListener("input", onUPSChange);
     MENU.addEventListener("mousedown", onMenuMouseDown, false);
     MENU.addEventListener("mouseup", onMenuMouseUp, false);
     window.addEventListener("resize", onWindowResize);
     WRAPAROUND.addEventListener("change", onWrapAroundChange);
     DRAWTYPE.addEventListener("change", onDrawTypeChange);
+    RASTERSIZE.addEventListener("input", onRasterSizeChange);
+    RESET.addEventListener("click", onResetClick);
+    PAUSE.addEventListener("click", onPauseClick);
+    STOP.addEventListener("click", onStopClick);
+  }
+
+  function setValuesFromUI() {
+    UPS.dispatchEvent(new Event("input"));
+    DRAWTYPE.dispatchEvent(new Event("change"));
+    WRAPAROUND.dispatchEvent(new Event("change"));
+    RASTERSIZE.dispatchEvent(new Event("input"));
   }
 
   function onDrawTypeChange(e: Event) {
     switch ((e.target as HTMLSelectElement).value) {
       case "gradient":
-        drawer = new GradientDrawer(CNV);
+        drawer = new GradientDrawer(CNV, rasterSize);
         break;
       case "genetic":
-        drawer = new ColorDrawer(CNV, ColorDrawerOptions.geneticColorPicker);
+        drawer = new ColorDrawer(CNV, rasterSize, ColorDrawerOptions.geneticColorPicker);
         break;
       case "random":
-        drawer = new ColorDrawer(CNV, ColorDrawerOptions.randomColorPicker);
+        drawer = new ColorDrawer(CNV, rasterSize, ColorDrawerOptions.randomColorPicker);
         break;
       default:
-        drawer = new SolidDrawer(CNV);
+        drawer = new SolidDrawer(CNV, rasterSize);
     }
   }
 
@@ -87,21 +108,39 @@ namespace GameOfLife {
     RASTER.height = window.innerHeight;
     if (life === undefined) {
       life = new Life(Math.ceil(CNV.width / rasterSize), Math.ceil(CNV.height / rasterSize));
+      drawRaster();
     } else {
-      life.setSize(Math.ceil(CNV.width / rasterSize), Math.ceil(CNV.height / rasterSize));
+      updateLifeSize();
     }
+  }
+
+  function updateLifeSize() {
+    life.setSize(Math.ceil(CNV.width / rasterSize), Math.ceil(CNV.height / rasterSize));
     drawRaster();
+  }
+
+  function onRasterSizeChange(e: Event) {
+    RASTERLABEL.textContent  = (e.target as HTMLInputElement).value;
+    rasterSize = Number((e.target as HTMLInputElement).value);
+    life.removeObserver(editDrawer);
+    editDrawer = new SolidDrawer(CNV, rasterSize);
+    life.registerObserver(editDrawer);
+    DRAWTYPE.dispatchEvent(new Event("change"));
+    updateLifeSize();
+
   }
 
   function onMenuMouseDown(e: MouseEvent) {
     if ((e.target as HTMLElement).id !== "menu" && (e.target as HTMLElement).id !== "menutitle") {
       return;
     }
+    CNV.addEventListener("mousemove", onMenuMouseMove, true);
     MENU.addEventListener("mousemove", onMenuMouseMove, true);
     mouseOffset = {x: e.clientX - MENU.offsetLeft, y: e.clientY - MENU.offsetTop};
   }
 
   function onMenuMouseUp() {
+    CNV.removeEventListener("mousemove", onMenuMouseMove, true);
     MENU.removeEventListener("mousemove", onMenuMouseMove, true);
   }
 
@@ -111,17 +150,67 @@ namespace GameOfLife {
   }
 
   function onStartClick() {
-    RASTER.classList.add("hidden");
-    CNV.removeEventListener("mousedown", onMouseDown);
-    CNV.removeEventListener("mousemove", onMouseMove);
     life.removeObserver(editDrawer);
-    editDrawer = new ColorDrawer(CNV, ColorDrawerOptions.geneticColorPicker);
     CNV.getContext("2d").clearRect(0, 0, CNV.width, CNV.height);
     life.registerObserver(drawer);
     life.start();
+    setState(State.running);
   }
 
-  function updateUPS(e) {
+  function onStopClick() {
+    CNV.getContext("2d").clearRect(0, 0, CNV.width, CNV.height);
+    life.removeObserver(drawer);
+    life.registerObserver(editDrawer);
+    life.reset();
+    setState(State.editing);
+  }
+
+  enum State {
+    "running",
+    "paused",
+    "editing",
+  };
+  function setState(state: State) {
+    switch (state) {
+      case State.running:
+        CNV.removeEventListener("mousedown", onMouseDown);
+        CNV.removeEventListener("mousemove", onMouseMove);
+        START.classList.add("hidden");
+        PAUSE.classList.remove("hidden");
+        RESET.classList.add("hidden");
+        STOP.classList.remove("hidden");
+        RASTER.classList.add("hidden");
+        break;
+      case State.paused:
+        PAUSE.classList.add("hidden");
+        START.classList.remove("hidden");
+        break;
+      default:
+        START.classList.remove("hidden");
+        PAUSE.classList.add("hidden");
+        RESET.classList.remove("hidden");
+        STOP.classList.add("hidden");
+        RASTER.classList.remove("hidden");
+        CNV.addEventListener("mousedown", onMouseDown);
+        CNV.addEventListener("mousemove", onMouseMove);
+    }
+  }
+
+  function onPauseClick() {
+    life.pause();
+    setState(State.paused);
+    life.removeObserver(drawer);
+  }
+
+  function onResetClick() {
+    life = new Life(Math.ceil(CNV.width / rasterSize), Math.ceil(CNV.height / rasterSize));
+    life.removeObserver(drawer);
+    life.registerObserver(editDrawer);
+    life.notifyObservers();
+    setState(State.editing);
+  }
+
+  function onUPSChange(e) {
     UPSLABEL.textContent = e.target.value;
     life.ups = parseInt(e.target.value, 10);
   }
@@ -156,7 +245,6 @@ namespace GameOfLife {
   }
 
   function drawRaster() {
-
     RCTX.strokeStyle = "black";
     const cnvW = CNV.width;
     const cnvH = CNV.height;
@@ -174,6 +262,6 @@ namespace GameOfLife {
       RCTX.stroke();
     }
   }
-
 }
+
 window.addEventListener("load", GameOfLife.init);

@@ -8,26 +8,26 @@ declare interface IColor {
 class ColorDrawer extends Drawer {
   protected getNewColor: (x: number, y: number) => IColor;
   private colors: IColor[][];
-  private previous: Uint8Array[];
+  private previous: BitMap;
 
-  constructor(cnv: HTMLCanvasElement, colorpicker: (x: number, y: number) => IColor) {
-    super(cnv);
+  constructor(cnv: HTMLCanvasElement, rasterSize: number, colorpicker: (x: number, y: number) => IColor) {
+    super(cnv, rasterSize);
     this.getNewColor = colorpicker.bind(this);
   }
 
-  public draw(grid: Uint8Array[], previous): void {
+  public draw(grid: BitMap, previous: BitMap): void {
     if (this.previous === undefined) {
       this.createInitialColors(grid);
     } else {
       this.previous = previous;
       this.adjustPrevColors(grid);
     }
-    const w = grid[0].length;
-    const h = grid.length;
-    const SIZE = 20;
+    const w = grid.getWidth();
+    const h = grid.getHeight();
+    const SIZE = this.rasterSize;
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
-        if (grid[y][x] === 1) {
+        if (grid.get(x, y)) {
           const c = this.colors[y][x];
           this.CTX.fillStyle = `rgba(${c.r},${c.g},${c.b},.2)`;
           this.CTX.fillRect(x * SIZE, y * SIZE, SIZE, SIZE);
@@ -42,12 +42,14 @@ class ColorDrawer extends Drawer {
   // protected getNewColor(x: number, y: number): IColor;
 
   protected getParentColors(x: number, y: number): IColor[] {
+    const width = this.previous.getWidth();
+    const height = this.previous.getHeight();
     const parents: IColor[] = new Array();
     // needs to know about wraparound to do it correctly though
     for (let offsetX = -1; offsetX < 2; offsetX++) {
       for (let offsetY = -1; offsetY < 2; offsetY++) {
-        if (x + offsetX !== -1 && x + offsetX !== this.previous[0].length &&
-          y + offsetY !== -1 && y + offsetY !== this.previous.length &&
+        if (x + offsetX !== -1 && x + offsetX !==  width &&
+          y + offsetY !== -1 && y + offsetY !== height &&
           this.previous[y + offsetY][x + offsetX] === 1) {
           parents.push(this.colors[y + offsetY][x + offsetX]);
         }
@@ -56,34 +58,33 @@ class ColorDrawer extends Drawer {
     return parents;
   }
 
-  protected adjustPrevColors(grid: Uint8Array[]): void {
-
+  protected adjustPrevColors(grid: BitMap): void {
+    const width = grid.getWidth();
+    const height = grid.getHeight();
     // adjust height of array
-    const minH = Math.min(grid.length, this.colors.length);
-    while (grid.length > this.colors.length) {
-      this.colors.push(new Array(grid[0].length));
+    const minH = Math.min(height, this.colors.length);
+    while (height > this.colors.length) {
+      this.colors.push(new Array(width));
     }
-    if (this.colors.length > grid.length) {
-      this.colors = this.colors.slice(0, grid.length);
+    if (this.colors.length > height) {
+      this.colors = this.colors.slice(0, height);
     }
 
     // adjust width of array
-    while (grid[0].length > this.colors[0].length) {
+    while (width > this.colors[0].length) {
       for (let i = 0; i < minH; i++) {
         this.colors[i].push({r: 0, g: 0, b: 0});
       }
     }
-    if ( grid[0].length < this.colors[0].length) {
+    if ( width < this.colors[0].length) {
       for (let i = 0; i < minH; i++) {
-        this.colors[i] = this.colors[i].slice(0, grid[0].length);
+        this.colors[i] = this.colors[i].slice(0, width);
       }
     }
 
-    const h = grid.length;
-    const w = grid[0].length;
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        if (grid[y][x] === 1 && this.previous[y][x] === 0) {
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        if (grid.get(x, y) && !this.previous.get(x, y)) {
           // new born, mix parents' colors
           this.colors[y][x] = this.getNewColor(x, y);
         }
@@ -91,15 +92,15 @@ class ColorDrawer extends Drawer {
     }
   }
 
-  private createInitialColors(grid: Uint8Array[]): void {
+  private createInitialColors(grid: BitMap): void {
     let c = 0;
-    const h = grid.length;
-    const w = grid[0].length;
+    const h = grid.getHeight();
+    const w = grid.getWidth();
     this.colors = new Array(h);
     for (let y = 0; y < h; y++) {
       this.colors[y] = new Array(w);
       for (let x = 0; x < w; x++) {
-        if (grid[y][x] === 1) {
+        if (grid.get(x, y)) {
           this.colors[y][x] = {
             r: (c % 3 === 0 ? 255 : 0),
             // tslint:disable-next-line:object-literal-sort-keys

@@ -1,29 +1,132 @@
 "use strict";
 class Drawer {
-    constructor(cnv) {
+    constructor(cnv, rasterSize) {
         this.CNV = cnv;
         this.CTX = cnv.getContext("2d");
+        this.rasterSize = rasterSize;
     }
     notify(args) {
         this.draw(args);
     }
 }
+class BitMap {
+    constructor(w, h) {
+        this.buffer = new ArrayBuffer(((w * h) >> 3) + 1);
+        this.w = w;
+        this.h = h;
+        this.b = new Uint8Array(this.buffer);
+        this.wrapAround = false;
+    }
+    clone() {
+        const b = new BitMap(this.getWidth(), this.getHeight());
+        b.buffer = this.buffer.slice(0);
+        b.b = new Uint8Array(b.buffer);
+        b.wrapAround = this.wrapAround;
+        return b;
+    }
+    getWidth() {
+        return this.w;
+    }
+    getHeight() {
+        return this.h;
+    }
+    changeSize(newW, newH) {
+        if (newW === this.w && newH === this.h) {
+            return;
+        }
+        const newBuffer = new ArrayBuffer(((newW * newH) >> 3) + 1);
+        const newB = new Uint8Array(newBuffer);
+        const minW = Math.min(this.w, newW);
+        const minH = Math.min(this.h, newH);
+        for (let x = 0; x < minW; x++) {
+            for (let y = 0; y < minH; y++) {
+                if (this.get(x, y)) {
+                    const i = y * newW + x;
+                    newB[i >> 3] |= (1 << (i & 0b111));
+                }
+            }
+        }
+        this.buffer = newBuffer;
+        this.b = newB;
+        this.w = newW;
+        this.h = newH;
+    }
+    get(x, y) {
+        const i = this.getIndex(x, y);
+        return this.getAt(i);
+    }
+    getAt(i) {
+        return (this.b[i >> 3] & (1 << (i & 0b111))) !== 0;
+    }
+    set(x, y) {
+        const i = this.getIndex(x, y);
+        this.setAt(i);
+    }
+    setAt(i) {
+        this.b[i >> 3] |= (1 << (i & 0b111));
+    }
+    unset(x, y) {
+        const i = this.getIndex(x, y);
+        this.unsetAt(i);
+    }
+    unsetAt(i) {
+        this.b[i >> 3] &= ~(1 << (i & 0b111));
+    }
+    toggle(x, y) {
+        const i = this.getIndex(x, y);
+        this.toggleAt(i);
+    }
+    toggleAt(i) {
+        this.b[i >> 3] ^= (1 << (i & 0b111));
+    }
+    getNeighbors(x, y) {
+        const NEIGHBORS = [
+            { x: -1, y: -1 },
+            { x: -1, y: 0 },
+            { x: -1, y: 1 },
+            { x: 0, y: -1 },
+            { x: 0, y: 1 },
+            { x: 1, y: -1 },
+            { x: 1, y: 0 },
+            { x: 1, y: 1 },
+        ];
+        let c = 0;
+        const w = this.w;
+        const h = this.h;
+        const wrapAround = this.wrapAround;
+        for (const n of NEIGHBORS) {
+            if ((x + n.x >= 0 && x + n.x < w && y + n.y >= 0 && y + n.y < h) || wrapAround) {
+                c += (this.get((w + x + n.x) % w, (h + y + n.y) % h) ? 1 : 0);
+            }
+        }
+        return c;
+    }
+    printBitMap() {
+        let str = "";
+        for (const b of this.b) {
+            str += Number(b).toString(2).padStart(8, "0");
+        }
+        str = str.replace(/(.{8})/g, "$1\n");
+        console.log(str);
+    }
+    getIndex(x, y) {
+        return y * this.w + x;
+    }
+}
 class SolidDrawer extends Drawer {
-    constructor(cnv) {
-        super(cnv);
-        this.CTX.fillStyle = "rgba(0,0,0,1)";
+    constructor(cnv, rasterSize) {
+        super(cnv, rasterSize);
     }
     draw(grid) {
-        const w = grid[0].length;
-        const h = grid.length;
-        const SIZE = 20;
+        this.CTX.fillStyle = "rgba(0,0,0,1)";
+        const w = grid.getWidth();
+        const h = grid.getHeight();
+        const SIZE = this.rasterSize;
+        this.CTX.clearRect(0, 0, w * SIZE, h * SIZE);
         for (let y = 0; y < h; y++) {
             for (let x = 0; x < w; x++) {
-                if (grid[y][x] === 1) {
+                if (grid.get(x, y)) {
                     this.CTX.fillRect(x * SIZE, y * SIZE, SIZE, SIZE);
-                }
-                else {
-                    this.CTX.clearRect(x * SIZE, y * SIZE, SIZE, SIZE);
                 }
             }
         }
@@ -31,21 +134,21 @@ class SolidDrawer extends Drawer {
 }
 class GradientDrawer extends Drawer {
     draw(grid) {
-        const w = grid[0].length;
-        const h = grid.length;
-        const SIZE = 20;
+        const w = grid.getWidth();
+        const h = grid.getHeight();
+        const SIZE = this.rasterSize;
         this.CTX.fillStyle = "rgba(0,0,0,0.2)";
         for (let y = 0; y < h; y++) {
             for (let x = 0; x < w; x++) {
-                if (grid[y][x] === 1) {
+                if (grid.get(x, y)) {
                     this.CTX.fillRect(x * SIZE, y * SIZE, SIZE, SIZE);
                 }
             }
         }
+        this.CTX.fillStyle = "rgba(255,255,255,0.2)";
         for (let y = 0; y < h; y++) {
             for (let x = 0; x < w; x++) {
-                if (grid[y][x] === 0) {
-                    this.CTX.fillStyle = "rgba(255,255,255,0.2)";
+                if (!grid.get(x, y)) {
                     this.CTX.fillRect(x * SIZE, y * SIZE, SIZE, SIZE);
                 }
             }
@@ -53,8 +156,8 @@ class GradientDrawer extends Drawer {
     }
 }
 class ColorDrawer extends Drawer {
-    constructor(cnv, colorpicker) {
-        super(cnv);
+    constructor(cnv, rasterSize, colorpicker) {
+        super(cnv, rasterSize);
         this.getNewColor = colorpicker.bind(this);
     }
     draw(grid, previous) {
@@ -65,12 +168,12 @@ class ColorDrawer extends Drawer {
             this.previous = previous;
             this.adjustPrevColors(grid);
         }
-        const w = grid[0].length;
-        const h = grid.length;
-        const SIZE = 20;
+        const w = grid.getWidth();
+        const h = grid.getHeight();
+        const SIZE = this.rasterSize;
         for (let y = 0; y < h; y++) {
             for (let x = 0; x < w; x++) {
-                if (grid[y][x] === 1) {
+                if (grid.get(x, y)) {
                     const c = this.colors[y][x];
                     this.CTX.fillStyle = `rgba(${c.r},${c.g},${c.b},.2)`;
                     this.CTX.fillRect(x * SIZE, y * SIZE, SIZE, SIZE);
@@ -83,11 +186,13 @@ class ColorDrawer extends Drawer {
         }
     }
     getParentColors(x, y) {
+        const width = this.previous.getWidth();
+        const height = this.previous.getHeight();
         const parents = new Array();
         for (let offsetX = -1; offsetX < 2; offsetX++) {
             for (let offsetY = -1; offsetY < 2; offsetY++) {
-                if (x + offsetX !== -1 && x + offsetX !== this.previous[0].length &&
-                    y + offsetY !== -1 && y + offsetY !== this.previous.length &&
+                if (x + offsetX !== -1 && x + offsetX !== width &&
+                    y + offsetY !== -1 && y + offsetY !== height &&
                     this.previous[y + offsetY][x + offsetX] === 1) {
                     parents.push(this.colors[y + offsetY][x + offsetX]);
                 }
@@ -96,28 +201,28 @@ class ColorDrawer extends Drawer {
         return parents;
     }
     adjustPrevColors(grid) {
-        const minH = Math.min(grid.length, this.colors.length);
-        while (grid.length > this.colors.length) {
-            this.colors.push(new Array(grid[0].length));
+        const width = grid.getWidth();
+        const height = grid.getHeight();
+        const minH = Math.min(height, this.colors.length);
+        while (height > this.colors.length) {
+            this.colors.push(new Array(width));
         }
-        if (this.colors.length > grid.length) {
-            this.colors = this.colors.slice(0, grid.length);
+        if (this.colors.length > height) {
+            this.colors = this.colors.slice(0, height);
         }
-        while (grid[0].length > this.colors[0].length) {
+        while (width > this.colors[0].length) {
             for (let i = 0; i < minH; i++) {
                 this.colors[i].push({ r: 0, g: 0, b: 0 });
             }
         }
-        if (grid[0].length < this.colors[0].length) {
+        if (width < this.colors[0].length) {
             for (let i = 0; i < minH; i++) {
-                this.colors[i] = this.colors[i].slice(0, grid[0].length);
+                this.colors[i] = this.colors[i].slice(0, width);
             }
         }
-        const h = grid.length;
-        const w = grid[0].length;
-        for (let y = 0; y < h; y++) {
-            for (let x = 0; x < w; x++) {
-                if (grid[y][x] === 1 && this.previous[y][x] === 0) {
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                if (grid.get(x, y) && !this.previous.get(x, y)) {
                     this.colors[y][x] = this.getNewColor(x, y);
                 }
             }
@@ -125,13 +230,13 @@ class ColorDrawer extends Drawer {
     }
     createInitialColors(grid) {
         let c = 0;
-        const h = grid.length;
-        const w = grid[0].length;
+        const h = grid.getHeight();
+        const w = grid.getWidth();
         this.colors = new Array(h);
         for (let y = 0; y < h; y++) {
             this.colors[y] = new Array(w);
             for (let x = 0; x < w; x++) {
-                if (grid[y][x] === 1) {
+                if (grid.get(x, y)) {
                     this.colors[y][x] = {
                         r: (c % 3 === 0 ? 255 : 0),
                         g: (c % 3 === 1 ? 255 : 0),
@@ -175,24 +280,30 @@ var GameOfLife;
     let UPS;
     let UPSLABEL;
     let START;
+    let PAUSE;
+    let RESET;
+    let STOP;
     let RASTER;
     let RCTX;
     let MENU;
     let WRAPAROUND;
     let DRAWTYPE;
+    let RASTERSIZE;
+    let RASTERLABEL;
     let life;
     let lastCell = { x: -1, y: -1 };
     let editDrawer;
     let drawer;
     let mouseOffset = { x: 0, y: 0 };
-    const rasterSize = 20;
+    let rasterSize = 20;
     function init() {
         declareGlobals();
         addListeners();
         onWindowResize();
-        editDrawer = new SolidDrawer(CNV);
-        drawer = new SolidDrawer(CNV);
+        editDrawer = new SolidDrawer(CNV, rasterSize);
+        drawer = new SolidDrawer(CNV, rasterSize);
         life.registerObserver(editDrawer);
+        setValuesFromUI();
     }
     GameOfLife.init = init;
     function declareGlobals() {
@@ -205,32 +316,46 @@ var GameOfLife;
         MENU = document.getElementById("menu");
         WRAPAROUND = document.getElementById("wraparound");
         DRAWTYPE = document.getElementById("drawtype");
-        UPS.value = "1";
+        RASTERSIZE = document.getElementById("rastersize");
+        RASTERLABEL = document.getElementById("rasterlabel");
+        RESET = document.getElementById("reset");
+        PAUSE = document.getElementById("pause");
+        STOP = document.getElementById("stop");
     }
     function addListeners() {
         CNV.addEventListener("mousedown", onMouseDown);
         CNV.addEventListener("mousemove", onMouseMove);
         START.addEventListener("click", onStartClick);
-        UPS.addEventListener("input", updateUPS);
+        UPS.addEventListener("input", onUPSChange);
         MENU.addEventListener("mousedown", onMenuMouseDown, false);
         MENU.addEventListener("mouseup", onMenuMouseUp, false);
         window.addEventListener("resize", onWindowResize);
         WRAPAROUND.addEventListener("change", onWrapAroundChange);
         DRAWTYPE.addEventListener("change", onDrawTypeChange);
+        RASTERSIZE.addEventListener("input", onRasterSizeChange);
+        RESET.addEventListener("click", onResetClick);
+        PAUSE.addEventListener("click", onPauseClick);
+        STOP.addEventListener("click", onStopClick);
+    }
+    function setValuesFromUI() {
+        UPS.dispatchEvent(new Event("input"));
+        DRAWTYPE.dispatchEvent(new Event("change"));
+        WRAPAROUND.dispatchEvent(new Event("change"));
+        RASTERSIZE.dispatchEvent(new Event("input"));
     }
     function onDrawTypeChange(e) {
         switch (e.target.value) {
             case "gradient":
-                drawer = new GradientDrawer(CNV);
+                drawer = new GradientDrawer(CNV, rasterSize);
                 break;
             case "genetic":
-                drawer = new ColorDrawer(CNV, ColorDrawerOptions.geneticColorPicker);
+                drawer = new ColorDrawer(CNV, rasterSize, ColorDrawerOptions.geneticColorPicker);
                 break;
             case "random":
-                drawer = new ColorDrawer(CNV, ColorDrawerOptions.randomColorPicker);
+                drawer = new ColorDrawer(CNV, rasterSize, ColorDrawerOptions.randomColorPicker);
                 break;
             default:
-                drawer = new SolidDrawer(CNV);
+                drawer = new SolidDrawer(CNV, rasterSize);
         }
     }
     function onWrapAroundChange(e) {
@@ -243,20 +368,35 @@ var GameOfLife;
         RASTER.height = window.innerHeight;
         if (life === undefined) {
             life = new Life(Math.ceil(CNV.width / rasterSize), Math.ceil(CNV.height / rasterSize));
+            drawRaster();
         }
         else {
-            life.setSize(Math.ceil(CNV.width / rasterSize), Math.ceil(CNV.height / rasterSize));
+            updateLifeSize();
         }
+    }
+    function updateLifeSize() {
+        life.setSize(Math.ceil(CNV.width / rasterSize), Math.ceil(CNV.height / rasterSize));
         drawRaster();
+    }
+    function onRasterSizeChange(e) {
+        RASTERLABEL.textContent = e.target.value;
+        rasterSize = Number(e.target.value);
+        life.removeObserver(editDrawer);
+        editDrawer = new SolidDrawer(CNV, rasterSize);
+        life.registerObserver(editDrawer);
+        DRAWTYPE.dispatchEvent(new Event("change"));
+        updateLifeSize();
     }
     function onMenuMouseDown(e) {
         if (e.target.id !== "menu" && e.target.id !== "menutitle") {
             return;
         }
+        CNV.addEventListener("mousemove", onMenuMouseMove, true);
         MENU.addEventListener("mousemove", onMenuMouseMove, true);
         mouseOffset = { x: e.clientX - MENU.offsetLeft, y: e.clientY - MENU.offsetTop };
     }
     function onMenuMouseUp() {
+        CNV.removeEventListener("mousemove", onMenuMouseMove, true);
         MENU.removeEventListener("mousemove", onMenuMouseMove, true);
     }
     function onMenuMouseMove(e) {
@@ -264,16 +404,64 @@ var GameOfLife;
         MENU.style.top = e.clientY - mouseOffset.y + "px";
     }
     function onStartClick() {
-        RASTER.classList.add("hidden");
-        CNV.removeEventListener("mousedown", onMouseDown);
-        CNV.removeEventListener("mousemove", onMouseMove);
         life.removeObserver(editDrawer);
-        editDrawer = new ColorDrawer(CNV, ColorDrawerOptions.geneticColorPicker);
         CNV.getContext("2d").clearRect(0, 0, CNV.width, CNV.height);
         life.registerObserver(drawer);
         life.start();
+        setState(State.running);
     }
-    function updateUPS(e) {
+    function onStopClick() {
+        CNV.getContext("2d").clearRect(0, 0, CNV.width, CNV.height);
+        life.removeObserver(drawer);
+        life.registerObserver(editDrawer);
+        life.reset();
+        setState(State.editing);
+    }
+    let State;
+    (function (State) {
+        State[State["running"] = 0] = "running";
+        State[State["paused"] = 1] = "paused";
+        State[State["editing"] = 2] = "editing";
+    })(State || (State = {}));
+    ;
+    function setState(state) {
+        switch (state) {
+            case State.running:
+                CNV.removeEventListener("mousedown", onMouseDown);
+                CNV.removeEventListener("mousemove", onMouseMove);
+                START.classList.add("hidden");
+                PAUSE.classList.remove("hidden");
+                RESET.classList.add("hidden");
+                STOP.classList.remove("hidden");
+                RASTER.classList.add("hidden");
+                break;
+            case State.paused:
+                PAUSE.classList.add("hidden");
+                START.classList.remove("hidden");
+                break;
+            default:
+                START.classList.remove("hidden");
+                PAUSE.classList.add("hidden");
+                RESET.classList.remove("hidden");
+                STOP.classList.add("hidden");
+                RASTER.classList.remove("hidden");
+                CNV.addEventListener("mousedown", onMouseDown);
+                CNV.addEventListener("mousemove", onMouseMove);
+        }
+    }
+    function onPauseClick() {
+        life.pause();
+        setState(State.paused);
+        life.removeObserver(drawer);
+    }
+    function onResetClick() {
+        life = new Life(Math.ceil(CNV.width / rasterSize), Math.ceil(CNV.height / rasterSize));
+        life.removeObserver(drawer);
+        life.registerObserver(editDrawer);
+        life.notifyObservers();
+        setState(State.editing);
+    }
+    function onUPSChange(e) {
         UPSLABEL.textContent = e.target.value;
         life.ups = parseInt(e.target.value, 10);
     }
@@ -340,48 +528,40 @@ class Observable {
 class Life extends Observable {
     constructor(width, height) {
         super();
-        this.wrapAround = false;
-        this.buffer = { 0: new Array(), 1: new Array() };
         this.c = 0;
         this._ups = 1;
+        this._wrapAround = false;
+        this.buffer = { 0: new BitMap(width, height), 1: new BitMap(width, height) };
         this.w = width;
         this.h = height;
-        this.initGrid();
+        this.startBitMap = new BitMap(width, height);
+    }
+    get wrapAround() {
+        return this._wrapAround;
+    }
+    set wrapAround(wrapAround) {
+        this._wrapAround = wrapAround;
+        this.buffer[0].wrapAround = wrapAround;
+        this.buffer[1].wrapAround = wrapAround;
+    }
+    isRunning() {
+        return this.clock !== undefined;
+    }
+    reset() {
+        if (this.clock !== undefined) {
+            clearInterval(this.clock);
+            this.clock = undefined;
+        }
+        this.c = 0;
+        this.buffer[this.c] = this.startBitMap;
+        this.notifyObservers();
     }
     getGrid() {
         return this.buffer[this.c % 2];
     }
     setSize(w, h) {
-        this.w = w;
-        this.h = h;
-        const minH = Math.min(h, this.buffer[0].length);
-        if (h < this.buffer[0].length) {
-            this.buffer[0] = this.buffer[0].slice(0, h);
-            this.buffer[1] = this.buffer[1].slice(0, h);
-        }
-        else if (h > this.buffer[0].length) {
-            for (let i = this.buffer[0].length; i < h; i++) {
-                this.buffer[0].push(new Uint8Array(w));
-                this.buffer[1].push(new Uint8Array(w));
-            }
-        }
-        if (w < this.buffer[0][0].length) {
-            for (let y = 0; y < minH; y++) {
-                this.buffer[0][y] = this.buffer[0][y].slice(0, w);
-                this.buffer[1][y] = this.buffer[1][y].slice(0, w);
-            }
-        }
-        else if (w > this.buffer[0][0].length) {
-            for (let y = 0; y < minH; y++) {
-                for (let i = 0; i < 2; i++) {
-                    const b = this.buffer[i][y].slice(0);
-                    this.buffer[i][y] = new Uint8Array(w);
-                    for (let x = 0; x < b.length; x++) {
-                        this.buffer[i][y][x] = b[x];
-                    }
-                }
-            }
-        }
+        this.buffer[0].changeSize(w, h);
+        this.buffer[1].changeSize(w, h);
         this.notifyObservers();
     }
     set ups(ups) {
@@ -400,69 +580,46 @@ class Life extends Observable {
         const off = this.buffer[(this.c + 1) % 2];
         for (let y = 0; y < this.h; y++) {
             for (let x = 0; x < this.w; x++) {
-                const neighbours = this.countNeighbours(off, x, y);
+                const neighbours = off.getNeighbors(x, y);
                 switch (neighbours) {
                     case 0:
                     case 1:
-                        grid[y][x] = 0;
+                        grid.unset(x, y);
                         break;
                     case 2:
-                        grid[y][x] = off[y][x];
+                        if (off.get(x, y)) {
+                            grid.set(x, y);
+                        }
+                        else {
+                            grid.unset(x, y);
+                        }
                         break;
                     case 3:
-                        grid[y][x] = 1;
+                        grid.set(x, y);
                         break;
                     default:
-                        grid[y][x] = 0;
+                        grid.unset(x, y);
                 }
             }
         }
         this.notifyObservers();
     }
+    pause() {
+        clearInterval(this.clock);
+    }
     start() {
-        console.log(this.wrapAround);
+        this.notifyObservers();
         this.clock = setInterval(this.tick.bind(this), 1000 / this.ups);
-        this.tick();
+        this.startBitMap = this.buffer[0].clone();
     }
     toggleCell(x, y) {
         const grid = this.buffer[this.c % 2];
-        if (grid[y][x] === 1) {
-            grid[y][x] = 0;
-        }
-        else {
-            grid[y][x] = 1;
-        }
+        grid.toggle(x, y);
         this.notifyObservers();
     }
     notifyObservers() {
         for (const observer of this.observers) {
             observer.notify(this.buffer[this.c % 2], this.buffer[(this.c + 1) % 2]);
-        }
-    }
-    countNeighbours(grid, x, y) {
-        let count = 0;
-        for (let offsetY = -1; offsetY < 2; offsetY++) {
-            for (let offsetX = -1; offsetX < 2; offsetX++) {
-                if (offsetY === 0 && offsetX === 0) {
-                    continue;
-                }
-                if (((x + offsetX !== -1 && y + offsetY !== -1 && y + offsetY !== this.h &&
-                    x + offsetX !== this.w) || this.wrapAround) &&
-                    grid[(this.h + y + offsetY) % this.h][(this.w + x + offsetX) % this.w] === 1) {
-                    count++;
-                }
-            }
-        }
-        return count;
-    }
-    initGrid() {
-        for (let i = 0; i < 2; i++) {
-            for (let y = 0; y < this.h; y++) {
-                this.buffer[i][y] = new Uint8Array(this.w);
-                for (let x = 0; x < this.w; x++) {
-                    this.buffer[i][y][x] = 0;
-                }
-            }
         }
     }
 }

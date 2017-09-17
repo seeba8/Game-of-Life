@@ -1,54 +1,55 @@
 /// <reference path="observable.ts" />
+/// <reference path="bitmap.ts" />
+
 class Life extends Observable {
   public w: number;
   public h: number;
-  public wrapAround = false;
-  private buffer: {0: Uint8Array[], 1: Uint8Array[]} = { 0: new Array(), 1: new Array() };
+  private buffer: {0: BitMap, 1: BitMap};
   private c = 0;
   private clock: number;
   private _ups: number = 1;
+  private _wrapAround: boolean = false;
+  private startBitMap: BitMap;
 
   constructor(width: number, height: number) {
     super();
+    this.buffer = { 0: new BitMap(width, height), 1: new BitMap(width, height)} ;
     this.w = width;
     this.h = height;
-    this.initGrid();
+    this.startBitMap = new BitMap(width, height);
+  }
+
+  public get wrapAround() {
+    return this._wrapAround;
+  }
+
+  public set wrapAround(wrapAround: boolean) {
+    this._wrapAround = wrapAround;
+    this.buffer[0].wrapAround = wrapAround;
+    this.buffer[1].wrapAround = wrapAround;
+  }
+
+  public isRunning(): boolean {
+    return this.clock !== undefined;
+  }
+
+  public reset() {
+    if (this.clock !== undefined) {
+      clearInterval(this.clock);
+      this.clock = undefined;
+    }
+    this.c = 0;
+    this.buffer[this.c] = this.startBitMap;
+    this.notifyObservers();
   }
 
   public getGrid() {
     return this.buffer[this.c % 2];
   }
 
-  public setSize(w: number, h: number) {
-    this.w = w;
-    this.h = h;
-    const minH = Math.min(h, this.buffer[0].length);
-    if (h < this.buffer[0].length) {
-      this.buffer[0] = this.buffer[0].slice(0, h);
-      this.buffer[1] = this.buffer[1].slice(0, h);
-    } else if (h > this.buffer[0].length) {
-      for (let i = this.buffer[0].length; i < h; i++) {
-        this.buffer[0].push(new Uint8Array(w));
-        this.buffer[1].push(new Uint8Array(w));
-      }
-    }
-    if (w < this.buffer[0][0].length) {
-      for (let y = 0; y < minH; y++) {
-        this.buffer[0][y] = this.buffer[0][y].slice(0, w);
-        this.buffer[1][y] = this.buffer[1][y].slice(0, w);
-      }
-    } else if (w > this.buffer[0][0].length) {
-      for (let y = 0; y < minH; y++) {
-        for (let i = 0; i < 2; i++) {
-          const b: Uint8Array = this.buffer[i][y].slice(0);
-          this.buffer[i][y] = new Uint8Array(w);
-          for (let x = 0; x < b.length; x++) {
-            this.buffer[i][y][x] = b[x];
-          }
-          // this.buffer[i][y].set(b[0]);
-        }
-      }
-    }
+  public setSize(w: number, h: number): void {
+    this.buffer[0].changeSize(w, h);
+    this.buffer[1].changeSize(w, h);
     this.notifyObservers();
   }
 
@@ -65,76 +66,56 @@ class Life extends Observable {
 
   public tick(): void {
     this.c++;
-    const grid = this.buffer[this.c % 2];
-    const off = this.buffer[(this.c + 1) % 2];
+    const grid: BitMap = this.buffer[this.c % 2];
+    const off: BitMap = this.buffer[(this.c + 1) % 2];
     for (let y = 0; y < this.h; y++) {
       for (let x = 0; x < this.w; x++) {
-        const neighbours = this.countNeighbours(off, x, y);
+        const neighbours = off.getNeighbors(x, y);
         switch (neighbours) {
           case 0:
           case 1:
-            grid[y][x] = 0;
+            grid.unset(x, y);
             break;
           case 2:
-            grid[y][x] = off[y][x];
+            if (off.get(x, y)) {
+              grid.set(x, y);
+            } else {
+              grid.unset(x, y);
+            }
             break;
           case 3:
-            grid[y][x] = 1;
+            grid.set(x, y);
             break;
           default:
-            grid[y][x] = 0;
+            grid.unset(x, y);
         }
       }
     }
     this.notifyObservers();
   }
 
+  public pause(): void {
+    clearInterval(this.clock);
+  }
+
   public start(): void {
-    console.log(this.wrapAround);
+    this.notifyObservers();
     this.clock = setInterval(this.tick.bind(this), 1000 / this.ups)
-    this.tick();
+    this.startBitMap = this.buffer[0].clone();
   }
 
   public toggleCell(x: number, y: number): void {
-    const grid = this.buffer[this.c % 2];
-    if (grid[y][x] === 1) {
-      grid[y][x] = 0;
-    } else {
-      grid[y][x] = 1;
-    }
+    const grid: BitMap = this.buffer[this.c % 2];
+    grid.toggle(x, y);
     this.notifyObservers();
   }
 
   /**
    * @override
    */
-  protected notifyObservers() {
+  public notifyObservers() {
     for (const observer of this.observers) {
       observer.notify(this.buffer[this.c % 2], this.buffer[(this.c + 1) % 2]);
-    }
-  }
-
-  private countNeighbours(grid, x: number, y: number): number {
-    let count = 0;
-    for (let offsetY = -1; offsetY < 2; offsetY++) {
-      for (let offsetX = -1; offsetX < 2; offsetX++) {
-        if (offsetY === 0 && offsetX === 0) { continue; }
-        if (((x + offsetX !== -1 && y + offsetY !== -1 && y + offsetY !== this.h &&
-          x + offsetX !== this.w) || this.wrapAround) &&
-          grid[(this.h + y + offsetY) % this.h][(this.w + x + offsetX) % this.w] === 1) { count++; }
-      }
-    }
-    return count;
-  }
-
-  private initGrid(): void {
-    for (let i = 0; i < 2; i++) {
-      for (let y = 0; y < this.h; y++) {
-        this.buffer[i][y] = new Uint8Array(this.w);
-        for (let x = 0; x < this.w; x++) {
-          this.buffer[i][y][x] = 0;
-        }
-      }
     }
   }
 }

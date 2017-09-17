@@ -6,13 +6,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="X-UA-Compatible" content="ie=edge">
   <title>Conway's game of life</title>
+  Use ImageData and scale up canvas / context
   <script src="script.js"></script>
   <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
-  <div id="menu">
-    <h1 class="wholerow" id="menutitle">Conway's Game of Life</h1>
+  <div id="menu" class="noselect movable">
+    <h1 class="wholerow movable" id="menutitle">Conway's Game of Life</h1>
     <div class="cell">
       <label for="ups" class="cell">Updates per second:</label>
       <span id="upslabel">1</span>
@@ -28,15 +29,20 @@
       <option value="genetic">Genetic colors</option>
       <option value="random">Random colors</option>
     </select>
-    <div class="cell">
-      <label for="rastersize" class="cell">Size</label>
+    <div>
+      <label for="rastersize">Size</label>
       <span id="rasterlabel">20</span>
     </div>
     <input type="range" min="4" max="100" value="20" id="rastersize"/>
     <label>File Upload</label><label>String Import</label>
-    <button class="cell" id="start">Start</button>
-    <button class="cell" id="reset">Reset</button>
-    
+    <div>
+      <button  id="start">Start</button>
+      <button id="pause" class="hidden">Pause</button>
+    </div>
+    <div>
+      <button  id="reset">Reset</button>
+      <button id="stop" class="hidden">Stop</button>
+    </div>
   </div>
   <canvas id="raster" width="600" height="600"></canvas>
   <canvas id="canvas" width="600" height="600"></canvas>

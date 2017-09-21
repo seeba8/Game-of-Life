@@ -1,12 +1,24 @@
 "use strict";
 class Drawer {
     constructor(cnv, rasterSize) {
+        this.isLittleEndian = true;
         this.CNV = cnv;
         this.CTX = cnv.getContext("2d");
         this.rasterSize = rasterSize;
+        this.buffer = document.createElement("canvas").getContext("2d");
+        this.checkEndianness();
     }
-    notify(args) {
-        this.draw(args);
+    notify(...args) {
+        this.draw(args[0], ...args.slice(1));
+    }
+    checkEndianness() {
+        const buf = new ArrayBuffer(4);
+        const buf32 = new Uint32Array(buf);
+        buf32[0] = 0x0a0b0c0d;
+        if (buf[0] === 0x0a && buf[1] === 0x0b && buf[2] === 0x0c &&
+            buf[3] === 0x0d) {
+            this.isLittleEndian = false;
+        }
     }
 }
 class BitMap {
@@ -118,41 +130,50 @@ class SolidDrawer extends Drawer {
         super(cnv, rasterSize);
     }
     draw(grid) {
-        this.CTX.fillStyle = "rgba(0,0,0,1)";
         const w = grid.getWidth();
         const h = grid.getHeight();
-        const SIZE = this.rasterSize;
-        this.CTX.clearRect(0, 0, w * SIZE, h * SIZE);
+        const imagedata = new ImageData(w, h);
+        const data = imagedata.data;
+        const buf = data.buffer;
+        const v32 = new Uint32Array(buf);
+        const white = 0xffffffff;
+        const black = this.isLittleEndian ? 0xff000000 : 0x000000ff;
         for (let y = 0; y < h; y++) {
             for (let x = 0; x < w; x++) {
                 if (grid.get(x, y)) {
-                    this.CTX.fillRect(x * SIZE, y * SIZE, SIZE, SIZE);
+                    v32[y * w + x] = black;
+                }
+                else {
+                    v32[y * w + x] = white;
                 }
             }
         }
+        this.buffer.putImageData(imagedata, 0, 0);
+        this.CTX.drawImage(this.buffer.canvas, 0, 0);
     }
 }
 class GradientDrawer extends Drawer {
     draw(grid) {
         const w = grid.getWidth();
         const h = grid.getHeight();
-        const SIZE = this.rasterSize;
-        this.CTX.fillStyle = "rgba(0,0,0,0.2)";
+        if (this.imagedata === undefined) {
+            this.imagedata = new ImageData(w, h);
+        }
+        this.CTX.clearRect(0, 0, this.CNV.width, this.CNV.height);
+        const data = this.imagedata.data;
+        const diff = 0x10;
         for (let y = 0; y < h; y++) {
             for (let x = 0; x < w; x++) {
                 if (grid.get(x, y)) {
-                    this.CTX.fillRect(x * SIZE, y * SIZE, SIZE, SIZE);
+                    data[(y * w + x) * 4 + 3] += diff;
+                }
+                else {
+                    data[(y * w + x) * 4 + 3] -= diff;
                 }
             }
         }
-        this.CTX.fillStyle = "rgba(255,255,255,0.2)";
-        for (let y = 0; y < h; y++) {
-            for (let x = 0; x < w; x++) {
-                if (!grid.get(x, y)) {
-                    this.CTX.fillRect(x * SIZE, y * SIZE, SIZE, SIZE);
-                }
-            }
-        }
+        this.buffer.putImageData(this.imagedata, 0, 0);
+        this.CTX.drawImage(this.buffer.canvas, 0, 0);
     }
 }
 class ColorDrawer extends Drawer {
@@ -161,46 +182,53 @@ class ColorDrawer extends Drawer {
         this.getNewColor = colorpicker.bind(this);
     }
     draw(grid, previous) {
-        if (this.previous === undefined) {
+        const w = grid.getWidth();
+        const h = grid.getHeight();
+        if (this.imagedata === undefined) {
+            this.imagedata = new ImageData(w, h);
             this.createInitialColors(grid);
         }
         else {
-            this.previous = previous;
-            this.adjustPrevColors(grid);
+            this.adjustPrevColors(grid, previous);
         }
-        const w = grid.getWidth();
-        const h = grid.getHeight();
-        const SIZE = this.rasterSize;
+        this.CTX.clearRect(0, 0, this.CNV.width, this.CNV.height);
+        const data = this.imagedata.data;
+        const d32 = new Uint32Array(data.buffer);
         for (let y = 0; y < h; y++) {
             for (let x = 0; x < w; x++) {
                 if (grid.get(x, y)) {
                     const c = this.colors[y][x];
-                    this.CTX.fillStyle = `rgba(${c.r},${c.g},${c.b},.2)`;
-                    this.CTX.fillRect(x * SIZE, y * SIZE, SIZE, SIZE);
+                    if (this.isLittleEndian) {
+                        d32[y * w + x] = (255 << 24) | (c.b << 16) | (c.g << 8) | c.r;
+                    }
+                    else {
+                        d32[y * w + x] = (c.r << 24) | (c.g << 16) | (c.b << 8) | 255;
+                    }
                 }
                 else {
-                    this.CTX.fillStyle = "rgba(255,255,255,.2)";
-                    this.CTX.fillRect(x * SIZE, y * SIZE, SIZE, SIZE);
+                    d32[y * w + x] = 0;
                 }
             }
         }
+        this.buffer.putImageData(this.imagedata, 0, 0);
+        this.CTX.drawImage(this.buffer.canvas, 0, 0);
     }
-    getParentColors(x, y) {
-        const width = this.previous.getWidth();
-        const height = this.previous.getHeight();
+    getParentColors(x, y, previous) {
+        const width = previous.getWidth();
+        const height = previous.getHeight();
         const parents = new Array();
         for (let offsetX = -1; offsetX < 2; offsetX++) {
             for (let offsetY = -1; offsetY < 2; offsetY++) {
                 if (x + offsetX !== -1 && x + offsetX !== width &&
                     y + offsetY !== -1 && y + offsetY !== height &&
-                    this.previous[y + offsetY][x + offsetX] === 1) {
+                    previous.get(x + offsetX, y + offsetY)) {
                     parents.push(this.colors[y + offsetY][x + offsetX]);
                 }
             }
         }
         return parents;
     }
-    adjustPrevColors(grid) {
+    adjustPrevColors(grid, previous) {
         const width = grid.getWidth();
         const height = grid.getHeight();
         const minH = Math.min(height, this.colors.length);
@@ -222,8 +250,8 @@ class ColorDrawer extends Drawer {
         }
         for (let y = 0; y < height; y++) {
             for (let x = 0; x < width; x++) {
-                if (grid.get(x, y) && !this.previous.get(x, y)) {
-                    this.colors[y][x] = this.getNewColor(x, y);
+                if (grid.get(x, y) && !previous.get(x, y)) {
+                    this.colors[y][x] = this.getNewColor(x, y, previous);
                 }
             }
         }
@@ -250,8 +278,8 @@ class ColorDrawer extends Drawer {
 }
 var ColorDrawerOptions;
 (function (ColorDrawerOptions) {
-    function geneticColorPicker(x, y) {
-        const parentColors = this.getParentColors(x, y);
+    function geneticColorPicker(x, y, previous) {
+        const parentColors = this.getParentColors(x, y, previous);
         const order = ["r", "g", "b"];
         const sum = [0, 0, 0];
         for (const color of parentColors) {
@@ -274,6 +302,13 @@ var ColorDrawerOptions;
     }
     ColorDrawerOptions.randomColorPicker = randomColorPicker;
 })(ColorDrawerOptions || (ColorDrawerOptions = {}));
+var State;
+(function (State) {
+    State[State["running"] = 0] = "running";
+    State[State["paused"] = 1] = "paused";
+    State[State["editing"] = 2] = "editing";
+})(State || (State = {}));
+;
 var GameOfLife;
 (function (GameOfLife) {
     let CNV;
@@ -284,6 +319,7 @@ var GameOfLife;
     let RESET;
     let STOP;
     let RASTER;
+    let CTX;
     let RCTX;
     let MENU;
     let WRAPAROUND;
@@ -296,19 +332,20 @@ var GameOfLife;
     let drawer;
     let mouseOffset = { x: 0, y: 0 };
     let rasterSize = 20;
+    let state = State.editing;
     function init() {
         declareGlobals();
         addListeners();
         onWindowResize();
-        editDrawer = new SolidDrawer(CNV, rasterSize);
-        drawer = new SolidDrawer(CNV, rasterSize);
-        life.registerObserver(editDrawer);
         setValuesFromUI();
+        editDrawer = new SolidDrawer(CNV, rasterSize);
+        life.registerObserver(editDrawer);
     }
     GameOfLife.init = init;
     function declareGlobals() {
         CNV = document.getElementById("canvas");
         RASTER = document.getElementById("raster");
+        CTX = CNV.getContext("2d");
         RCTX = RASTER.getContext("2d");
         UPS = document.getElementById("ups");
         UPSLABEL = document.getElementById("upslabel");
@@ -344,6 +381,11 @@ var GameOfLife;
         RASTERSIZE.dispatchEvent(new Event("input"));
     }
     function onDrawTypeChange(e) {
+        ;
+        if (state !== State.editing) {
+            console.log(state);
+            life.removeObserver(drawer);
+        }
         switch (e.target.value) {
             case "gradient":
                 drawer = new GradientDrawer(CNV, rasterSize);
@@ -357,6 +399,9 @@ var GameOfLife;
             default:
                 drawer = new SolidDrawer(CNV, rasterSize);
         }
+        if (state !== State.editing) {
+            life.registerObserver(drawer);
+        }
     }
     function onWrapAroundChange(e) {
         life.wrapAround = e.target.checked;
@@ -368,22 +413,23 @@ var GameOfLife;
         RASTER.height = window.innerHeight;
         if (life === undefined) {
             life = new Life(Math.ceil(CNV.width / rasterSize), Math.ceil(CNV.height / rasterSize));
-            drawRaster();
         }
         else {
             updateLifeSize();
+            drawRaster();
         }
     }
     function updateLifeSize() {
         life.setSize(Math.ceil(CNV.width / rasterSize), Math.ceil(CNV.height / rasterSize));
         drawRaster();
+        CTX.setTransform(1, 0, 0, 1, 0, 0);
+        CTX.scale(rasterSize, rasterSize);
+        CTX.imageSmoothingEnabled = false;
+        life.notifyObservers();
     }
     function onRasterSizeChange(e) {
         RASTERLABEL.textContent = e.target.value;
         rasterSize = Number(e.target.value);
-        life.removeObserver(editDrawer);
-        editDrawer = new SolidDrawer(CNV, rasterSize);
-        life.registerObserver(editDrawer);
         DRAWTYPE.dispatchEvent(new Event("change"));
         updateLifeSize();
     }
@@ -414,17 +460,11 @@ var GameOfLife;
         CNV.getContext("2d").clearRect(0, 0, CNV.width, CNV.height);
         life.removeObserver(drawer);
         life.registerObserver(editDrawer);
-        life.reset();
         setState(State.editing);
+        life.reset();
     }
-    let State;
-    (function (State) {
-        State[State["running"] = 0] = "running";
-        State[State["paused"] = 1] = "paused";
-        State[State["editing"] = 2] = "editing";
-    })(State || (State = {}));
-    ;
-    function setState(state) {
+    function setState(s) {
+        state = s;
         switch (state) {
             case State.running:
                 CNV.removeEventListener("mousedown", onMouseDown);
@@ -466,6 +506,9 @@ var GameOfLife;
         life.ups = parseInt(e.target.value, 10);
     }
     function onMouseDown(e) {
+        if (e.button !== 0) {
+            return;
+        }
         lastCell = { x: -1, y: -1 };
         onCanvasDrag(e);
     }

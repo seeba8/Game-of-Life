@@ -3,6 +3,12 @@
 /// <reference path="gradientdrawer.ts" />
 /// <reference path="colordrawer.ts" />
 
+enum State {
+  "running",
+  "paused",
+  "editing",
+};
+
 namespace GameOfLife {
   let CNV: HTMLCanvasElement;
   let UPS: HTMLInputElement;
@@ -12,6 +18,7 @@ namespace GameOfLife {
   let RESET: HTMLButtonElement;
   let STOP: HTMLButtonElement;
   let RASTER: HTMLCanvasElement;
+  let CTX: CanvasRenderingContext2D;
   let RCTX: CanvasRenderingContext2D;
   let MENU: HTMLDivElement;
   let WRAPAROUND: HTMLInputElement;
@@ -24,6 +31,7 @@ namespace GameOfLife {
   let drawer: Drawer;
   let mouseOffset = {x: 0, y: 0};
   let rasterSize = 20;
+  let state = State.editing;
 
   export function init() {
     //     readRLE(`#N Gosper glider gun
@@ -35,15 +43,15 @@ namespace GameOfLife {
     declareGlobals();
     addListeners();
     onWindowResize();
-    editDrawer = new SolidDrawer(CNV, rasterSize);
-    drawer = new SolidDrawer(CNV, rasterSize);
-    life.registerObserver(editDrawer);
     setValuesFromUI();
+    editDrawer = new SolidDrawer(CNV, rasterSize);
+    life.registerObserver(editDrawer);
   }
 
   function declareGlobals() {
     CNV = document.getElementById("canvas") as HTMLCanvasElement;
     RASTER = document.getElementById("raster") as HTMLCanvasElement;
+    CTX = CNV.getContext("2d") as CanvasRenderingContext2D;
     RCTX = RASTER.getContext("2d") as CanvasRenderingContext2D;
     UPS = document.getElementById("ups") as HTMLInputElement;
     UPSLABEL = document.getElementById("upslabel") as HTMLSpanElement;
@@ -81,7 +89,11 @@ namespace GameOfLife {
     RASTERSIZE.dispatchEvent(new Event("input"));
   }
 
-  function onDrawTypeChange(e: Event) {
+  function onDrawTypeChange(e: Event) {;
+    if (state !== State.editing) {
+      console.log(state)
+      life.removeObserver(drawer);
+    }
     switch ((e.target as HTMLSelectElement).value) {
       case "gradient":
         drawer = new GradientDrawer(CNV, rasterSize);
@@ -94,6 +106,9 @@ namespace GameOfLife {
         break;
       default:
         drawer = new SolidDrawer(CNV, rasterSize);
+    }
+    if (state !== State.editing) {
+      life.registerObserver(drawer);
     }
   }
 
@@ -108,26 +123,26 @@ namespace GameOfLife {
     RASTER.height = window.innerHeight;
     if (life === undefined) {
       life = new Life(Math.ceil(CNV.width / rasterSize), Math.ceil(CNV.height / rasterSize));
-      drawRaster();
     } else {
       updateLifeSize();
+      drawRaster();
     }
   }
 
   function updateLifeSize() {
     life.setSize(Math.ceil(CNV.width / rasterSize), Math.ceil(CNV.height / rasterSize));
     drawRaster();
+    CTX.setTransform(1, 0, 0, 1, 0, 0);
+    CTX.scale(rasterSize, rasterSize);
+    CTX.imageSmoothingEnabled = false;
+    life.notifyObservers();
   }
 
   function onRasterSizeChange(e: Event) {
     RASTERLABEL.textContent  = (e.target as HTMLInputElement).value;
     rasterSize = Number((e.target as HTMLInputElement).value);
-    life.removeObserver(editDrawer);
-    editDrawer = new SolidDrawer(CNV, rasterSize);
-    life.registerObserver(editDrawer);
     DRAWTYPE.dispatchEvent(new Event("change"));
     updateLifeSize();
-
   }
 
   function onMenuMouseDown(e: MouseEvent) {
@@ -161,16 +176,12 @@ namespace GameOfLife {
     CNV.getContext("2d").clearRect(0, 0, CNV.width, CNV.height);
     life.removeObserver(drawer);
     life.registerObserver(editDrawer);
-    life.reset();
     setState(State.editing);
-  }
+    life.reset();
 
-  enum State {
-    "running",
-    "paused",
-    "editing",
-  };
-  function setState(state: State) {
+  }
+  function setState(s: State) {
+    state = s;
     switch (state) {
       case State.running:
         CNV.removeEventListener("mousedown", onMouseDown);
@@ -215,7 +226,10 @@ namespace GameOfLife {
     life.ups = parseInt(e.target.value, 10);
   }
 
-  function onMouseDown(e) {
+  function onMouseDown(e: MouseEvent) {
+    if (e.button !== 0) {
+      return;
+    }
     lastCell = { x: -1, y: -1 };
     onCanvasDrag(e);
   }
